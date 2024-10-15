@@ -1,0 +1,190 @@
+from abc import ABC, abstractclassmethod, abstractproperty
+from datetime import datetime
+
+# Classe base para Clientes
+class Cliente:
+    def __init__(self, endereco):
+        self.endereco = endereco  # Endereço do cliente
+        self.contas = []  # Lista de contas do cliente
+
+    def realizar_transacao(self, conta, transacao):
+        # Registra a transação na conta
+        transacao.registrar(conta)
+
+    def adicionar_conta(self, conta):
+        # Adiciona uma nova conta à lista de contas
+        self.contas.append(conta)
+
+# Classe para representar um cliente pessoa física
+class PessoaFisica(Cliente):
+    def __init__(self, nome, data_nascimento, cpf, endereco):
+        super().__init__(endereco)  # Chama o construtor da classe base
+        self.nome = nome
+        self.data_nascimento = data_nascimento
+        self.cpf = cpf
+
+# Classe base para Contas
+class Conta:
+    def __init__(self, numero, cliente):
+        self._saldo = 0  # Saldo inicial
+        self._numero = numero  # Número da conta
+        self._agencia = "0001"  # Agência padrão
+        self._cliente = cliente  # Cliente associado à conta
+        self._historico = Historico()  # Histórico de transações
+
+    @classmethod
+    def nova_conta(cls, cliente, numero):
+        # Método de classe para criar uma nova conta
+        return cls(numero, cliente)
+
+    @property
+    def saldo(self):
+        # Propriedade para acessar o saldo
+        return self._saldo
+
+    @property
+    def numero(self):
+        # Propriedade para acessar o número da conta
+        return self._numero
+
+    @property
+    def agencia(self):
+        # Propriedade para acessar a agência
+        return self._agencia
+
+    @property
+    def cliente(self):
+        # Propriedade para acessar o cliente
+        return self._cliente
+
+    @property
+    def historico(self):
+        # Propriedade para acessar o histórico de transações
+        return self._historico
+
+    def sacar(self, valor):
+        # Método para realizar um saque
+        saldo = self.saldo
+        excedeu_saldo = valor > saldo
+
+        if excedeu_saldo:
+            print("\n@@@ Operação falhou! Você não tem saldo suficiente. @@@")
+        elif valor > 0:
+            self._saldo -= valor  # Deduz o valor do saldo
+            print("\n=== Saque realizado com sucesso! ===")
+            return True
+        else:
+            print("\n@@@ Operação falhou! O valor informado é inválido. @@@")
+        
+        return False
+
+    def depositar(self, valor):
+        # Método para realizar um depósito
+        if valor > 0:
+            self._saldo += valor  # Adiciona o valor ao saldo
+            print("\n=== Depósito realizado com sucesso! ===")
+        else:
+            print("\n@@@ Operação falhou! O valor informado é inválido. @@@")
+            return False
+        
+        return True
+
+# Classe para Contas Correntes, que herda de Conta
+class ContaCorrente(Conta):
+    def __init__(self, numero, cliente, limite=500, limite_saques=3):
+        super().__init__(numero, cliente)  # Chama o construtor da classe base
+        self.limite = limite  # Limite de saque
+        self.limite_saques = limite_saques  # Limite de saques permitidos
+
+    def sacar(self, valor):
+        # Verifica limites específicos para saques em conta corrente
+        numero_saques = len(
+            [transacao for transacao in self.historico.transacoes if transacao["tipo"] == Saque.__name__]
+        )
+
+        excedeu_limite = valor > self.limite
+        excedeu_saques = numero_saques >= self.limite_saques
+
+        if excedeu_limite:
+            print("\n@@@ Operação falhou! O valor do saque excede o limite. @@@")
+        elif excedeu_saques:
+            print("\n@@@ Operação falhou! Número máximo de saques excedido. @@@")
+        else:
+            return super().sacar(valor)  # Chama o método de saque da classe base
+
+        return False
+
+    def __str__(self):
+        # Representação da conta como string
+        return f"""\ 
+            Agência:\t{self.agencia}
+            C/C:\t\t{self.numero}
+            Titular:\t{self.cliente.nome}
+        """
+
+# Classe para o Histórico de Transações
+class Historico:
+    def __init__(self):
+        self._transacoes = []  # Lista para armazenar transações
+
+    @property
+    def transacoes(self):
+        # Propriedade para acessar as transações
+        return self._transacoes
+
+    def adicionar_transacao(self, transacao):
+        # Adiciona uma nova transação ao histórico
+        self._transacoes.append(
+            {
+                "tipo": transacao.__class__.__name__,
+                "valor": transacao.valor,
+                "data": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            }
+        )
+
+# Classe abstrata para Transações
+class Transacao(ABC):
+    @property
+    @abstractproperty
+    def valor(self):
+        # Propriedade abstrata para o valor da transação
+        pass
+
+    @abstractclassmethod
+    def registrar(self, conta):
+        # Método abstrato para registrar a transação
+        pass
+
+# Classe para Saques, que herda de Transacao
+class Saque(Transacao):
+    def __init__(self, valor):
+        self._valor = valor  # Valor do saque
+
+    @property
+    def valor(self):
+        # Propriedade para acessar o valor do saque
+        return self._valor
+
+    def registrar(self, conta):
+        # Registra o saque na conta
+        sucesso_transacao = conta.sacar(self.valor)
+
+        if sucesso_transacao:
+            conta.historico.adicionar_transacao(self)  # Adiciona ao histórico se bem-sucedido
+
+# Classe para Depósitos, que herda de Transacao
+class Deposito(Transacao):
+    def __init__(self, valor):
+        self._valor = valor  # Valor do depósito
+
+    @property
+    def valor(self):
+        # Propriedade para acessar o valor do depósito
+        return self._valor
+
+    def registrar(self, conta):
+        # Registra o depósito na conta
+        sucesso_transacao = conta.depositar(self.valor)
+
+        if sucesso_transacao:
+            conta.historico.adicionar_transacao(self)  # Adiciona ao histórico se bem-sucedido
